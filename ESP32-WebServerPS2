@@ -1,0 +1,235 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <PS2X_lib.h>  //for v1.6
+
+//定義 PS2 搖桿
+#define PS2_DAT        27  //MISO  黃色線
+#define PS2_CMD        26  //MOSI  綠色線
+#define PS2_SEL        33  //SS    白色線
+#define PS2_CLK        25  //SLK   藍色線
+#define pressures   true
+#define rumble      true
+PS2X ps2x; // create PS2 Controller Class
+int error = -1;
+byte type = 0;
+byte vibrate = 0;
+int tryNum = 1;
+int _pss_LY = 0;
+int _pss_LX = 0;
+int _PSAB_PAD_UP = 0;
+int _PSAB_PAD_DOWN = 0;
+//定義 PS2 搖桿
+
+
+//定義 WIFI
+char ssid[] = "Tenda_17CD00"; //請修改為您連線的網路名稱
+char password[] = "28952084"; //請修改為您連線的網路密碼
+int _wifitime = 0;
+int _delaytime1 = 500;
+int _delaytime2 = 0;
+//定義 WIFI
+
+
+String _movecont, _movechar, _prehttpcode;
+
+
+void _wifimove(String _move)
+{
+      Serial.print("啟動網頁連線");
+      HTTPClient http;
+      _movecont = "pm_" + String(_move);
+      String _movetemp = "http://192.168.100.206/" + String(_move);
+      http.begin(_movetemp);  
+      _prehttpcode = "httpCode" + _move;
+      delay(_delaytime1);
+      int httpCode = http.GET(); //一定要加這行, 否則http.begin()沒有作用
+      Serial.print("httpCode=");
+      Serial.println(httpCode);
+      delay(_delaytime1);
+      http.end();
+}
+
+
+
+void setup(){
+
+Serial.begin(115200);
+
+//有關WIFI的初始設定
+Serial.print("開始連線到無線網路SSID:");
+Serial.println(ssid);
+//1.設定WiFi模式
+WiFi.mode(WIFI_STA);
+WiFi.disconnect();//斷線（初始化的意思）
+delay(100);
+//2.啟動WiFi連線
+WiFi.begin(ssid, password);
+//3.檢查連線狀態
+while (WiFi.status() != WL_CONNECTED and _wifitime <= 10) {
+  Serial.print(".");
+  delay(1000);
+  _wifitime = _wifitime + 1;
+}
+Serial.println("連線完成");
+Serial.println(WiFi.localIP());
+//有關WIFI的初始設定  
+
+
+//有關PS2的初始設定
+//added delay to give wireless ps2 module some time to startup, before configuring it
+//CHANGES for v1.6 HERE!!! **************PAY ATTENTION*************
+while (error != 0) {
+  delay(1000);// 1 second wait
+  //setup pins and settings: GamePad(clock, command, attention, data, Pressures?, Rumble?) check for error
+  error = ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_SEL, PS2_DAT, pressures, rumble);
+  Serial.print("#try config ");
+  Serial.println(tryNum);
+  tryNum ++;
+}
+Serial.println(ps2x.Analog(1), HEX);
+type = ps2x.readType();
+switch(type) {
+  case 0:
+    Serial.println(" Unknown Controller type found ");
+    break;
+  case 1:
+    Serial.println(" DualShock Controller found ");
+    break;
+  case 2:
+    Serial.println(" GuitarHero Controller found ");
+    break;
+  case 3:
+    Serial.println(" Wireless Sony DualShock Controller found ");
+    break;
+ }
+//有關PS2的初始設定
+}
+
+void loop(){
+HTTPClient http;
+if(type == 1){ //DualShock Controller
+  ps2x.read_gamepad(false, vibrate); //read controller and set large motor to spin at 'vibrate' speed
+  //will be TRUE as long as button is pressed
+  if(ps2x.Button(PSB_START)) //PS2手柄按下[START]鍵
+    {
+    Serial.println("Start is being held");
+    _wifimove("Gled=ON"); 
+    }
+  if(ps2x.Button(PSB_SELECT)) //PS2手柄按下[SELECT]鍵
+    {
+    Serial.println("Select is being held");
+    _wifimove("Gled=OFF"); 
+    }
+
+  //will be TRUE as long as button is pressed
+  if(ps2x.Button(PSB_PAD_UP)) {  //PS2手柄按下[往上]鍵
+    Serial.print("Up held this hard: ");
+  }
+  if(ps2x.Button(PSB_PAD_RIGHT)){ //PS2手柄按下[往右]鍵
+    Serial.print("Right held this hard: ");
+    //_wifimove("Gled=OFF");
+  }
+  if(ps2x.Button(PSB_PAD_LEFT)){ //PS2手柄按下[往左]鍵
+    Serial.print("LEFT held this hard: ");
+    //_wifimove("Gled=ON"); 
+   }
+  if(ps2x.Button(PSB_PAD_DOWN)){ //PS2手柄按下[往下]鍵
+    Serial.print("DOWN held this hard: ");
+  }
+  vibrate = ps2x.Analog(PSAB_CROSS);  //this will set the large motor vibrate speed based on how hard you press the blue (X) button
+  if (ps2x.NewButtonState()) {        //will be TRUE if any button changes state (on to off, or off to on)
+      
+    if(ps2x.Button(PSB_L3)) //PS2手柄按下[L3]鍵
+      {
+      Serial.println("L3 pressed");
+      //_wifimove("Gled=ON");
+      }
+    if(ps2x.Button(PSB_R3)) //PS2手柄按下[R3]鍵
+      {
+      Serial.println("R3 pressed");
+      //_wifimove("Gled=OFF");
+      }
+    if(ps2x.Button(PSB_L2)) //PS2手柄按下[L2]鍵
+      {
+      Serial.println("L2 pressed");
+      //_wifimove("Yled=ON"); 
+      }
+    if(ps2x.Button(PSB_R2))  //PS2手柄按下[R2]鍵
+      {
+      Serial.println("R2 pressed");
+      //_wifimove("Yled=ON"); 
+      }      
+  }
+  //△□○×
+  if(ps2x.ButtonPressed(PSB_CIRCLE))               //will be TRUE if button was JUST pressed
+    {
+    Serial.println("○ just pressed");
+    _wifimove("Bled=ON");
+    }    
+  if(ps2x.ButtonReleased(PSB_SQUARE))              //will be TRUE if button was JUST released
+    {
+    Serial.println("□ just released");
+    _wifimove("Bled=OFF");
+    }
+  if(ps2x.Button(PSB_TRIANGLE)) //PS2手柄按下[△]鍵
+    {
+    Serial.println("△ pressed");  
+    //_wifimove("Rled=ON");
+    }
+  if(ps2x.NewButtonState(PSB_CROSS))               //will be TRUE if button was JUST pressed OR released
+    {
+    Serial.println("X just changed");
+    //_wifimove("Rled=OFF");
+    }
+    
+  if(ps2x.Button(PSB_L1))  //print stick values if either is TRUE
+    {
+    Serial.println("按下 L1 Stick Values:");
+    _wifimove("Yled=ON"); 
+    }
+  if(ps2x.Button(PSB_R1))  //print stick values if either is TRUE
+    {
+    Serial.println("按下 R1 Stick Values:");
+    _wifimove("Yled=OFF"); 
+    }
+  _pss_LY = ps2x.Analog(PSS_LY), DEC;  //偵測2顆圓形雙軸是否有移動
+  _pss_LX = ps2x.Analog(PSS_LX), DEC;
+  if(_pss_LY <= 10)              //LY 向上推
+    {
+    Serial.print("移動左邊Stick Values:");
+    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX
+    Serial.print(",");
+    Serial.println(ps2x.Analog(PSS_LX), DEC);
+    delay(200);
+    //_wifimove("Rled=ON"); 
+  }    
+  if(_pss_LY >= 250)              //LY 向下拉
+    {
+    Serial.print("移動左邊Stick Values:");
+    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX
+    Serial.print(",");
+    Serial.println(ps2x.Analog(PSS_LX), DEC);
+    delay(_delaytime2);
+    //_wifimove("Rled=OFF"); 
+  }
+  if(_pss_LX <= 10)              //LX 向左推
+    {
+    Serial.print("移動左邊Stick Values:");
+    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX
+    Serial.print(",");
+    Serial.println(ps2x.Analog(PSS_LX), DEC);
+    delay(200);
+    //_wifimove(3); 
+  }    
+  if(_pss_LX >= 250)              //LY 向右推
+    {
+    Serial.print("移動左邊Stick Values:");
+    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX
+    Serial.print(",");
+    Serial.println(ps2x.Analog(PSS_LX), DEC);
+    delay(_delaytime2);
+    //_wifimove(4); 
+  }
+}
+delay(200);
+}
